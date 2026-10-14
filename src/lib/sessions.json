@@ -1,0 +1,6 @@
+[
+  { "name": "Tokyo", "abbrev": "TOK", "openUTC": "00:00" },
+  { "name": "London", "abbrev": "LON", "openUTC": "07:00" },
+  { "name": "New York", "abbrev": "NY", "openUTC": "12:00" },
+  { "name": "Sydney", "abbrev": "SYD", "openUTC": "21:00" }
+]
