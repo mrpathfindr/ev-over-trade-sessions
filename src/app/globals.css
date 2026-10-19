@@ -133,6 +133,48 @@ h2 {
   margin-bottom: 2px;
 }
 
+.tooltip-box .tt-marker {
+  margin-top: 4px;
+  font-weight: 700;
+}
+
+.tooltip-box .tt-sub {
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+/* ---- experiment markers on the chart ---- */
+.marker-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.marker-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: var(--muted);
+}
+
+.marker-legend b {
+  color: var(--text);
+}
+
+.trade-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.trade-nav .toggle button:disabled {
+  cursor: default;
+}
+
 /* ---- experiment ---- */
 .run-button {
   background: #1e2a3a;
@@ -153,6 +195,64 @@ h2 {
 .run-button:disabled {
   opacity: 0.5;
   cursor: wait;
+}
+
+.variables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin: 12px 0 14px;
+}
+
+.variable {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.variable-name {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.toggle button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.pending-note {
+  margin-left: 12px;
+  font-size: 12px;
+  color: #e0b252;
+}
+
+.run-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: center;
+  margin-top: 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0d1119;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.run-state b {
+  color: var(--text);
+}
+
+.run-changes {
+  color: #e0b252;
+}
+
+.results-head {
+  margin-top: 16px;
+  margin-bottom: 0;
 }
 
 .summary {
@@ -194,43 +294,226 @@ h2 {
   min-width: 70px;
 }
 
-.cell-chips {
+/* 2x2 grid of session squares per weekday cell:
+   Tokyo (top-left) London (top-right) / New York (bottom-left) Sydney (bottom-right) */
+.session-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.square {
+  aspect-ratio: 1 / 1;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-}
-
-.chip {
-  display: inline-block;
-  padding: 2px 6px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 6px;
   border-radius: 4px;
-  white-space: nowrap;
 }
 
-.chip-pnl {
-  display: block;
+.square.clickable {
+  cursor: pointer;
+}
+
+.square.clickable:hover {
+  outline: 1px solid currentColor;
+}
+
+.sq-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
   font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.sq-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+
+.sq-usd {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.sq-pct {
+  font-size: 11px;
   opacity: 0.85;
 }
 
-.chip.win {
+/* close-reason tag: TP / SL / EXP */
+.chip-reason {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border: 1px solid currentColor;
+  opacity: 0.9;
+}
+
+.chip-reason.expiry {
+  opacity: 0.6;
+}
+
+.square.win {
   background: rgba(38, 166, 154, 0.15);
   color: var(--up);
 }
 
-.chip.loss {
+.square.loss {
   background: rgba(239, 83, 80, 0.15);
   color: var(--down);
 }
 
-.chip.flat,
-.chip.nodata {
+.square.flat,
+.square.nodata {
   background: rgba(138, 143, 157, 0.12);
   color: var(--flat);
+}
+
+.square.empty {
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--muted);
 }
 
 .cell-r {
   margin-top: 4px;
   font-size: 10px;
   color: var(--muted);
+}
+
+/* ---- expected value table ---- */
+.ev-section {
+  margin-top: 28px;
+}
+
+.ev-title {
+  font-size: 15px;
+  color: var(--text);
+  letter-spacing: 1px;
+  margin: 0 0 6px;
+}
+
+.ev-formula {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.ev-table th .ev-open {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.ev-table th.ev-agg,
+.ev-table .ev-agg-row td {
+  border-top: 2px solid #33415c;
+}
+
+.ev-table th.ev-agg {
+  border-top: 1px solid var(--border);
+  border-left: 2px solid #33415c;
+}
+
+.ev-table td.ev-cell:last-child {
+  border-left: 2px solid #33415c;
+}
+
+.ev-cell {
+  text-align: center !important;
+  vertical-align: middle !important;
+  padding: 10px 6px !important;
+}
+
+.ev-value {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ev-n {
+  display: block;
+  font-size: 10px;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+.ev-cell.ev-pos {
+  background: rgba(38, 166, 154, 0.45);
+  color: #e6fffb;
+}
+
+.ev-cell.ev-neg {
+  background: rgba(239, 83, 80, 0.45);
+  color: #ffecec;
+}
+
+.ev-cell.ev-zero,
+.ev-cell.ev-none {
+  background: rgba(138, 143, 157, 0.12);
+  color: var(--flat);
+}
+
+/* ---- run graphs (PnL over time / EV over time) ---- */
+.charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .charts-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.run-chart {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 12px 4px;
+  background: #0d1119;
+  min-width: 0;
+}
+
+.run-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.run-chart h3 {
+  font-size: 14px;
+  letter-spacing: 1px;
+  margin: 0;
+}
+
+.run-chart-finals {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.run-chart-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 4px 0 8px;
+  line-height: 1.4;
+}
+
+.trades-section {
+  margin-top: 28px;
 }

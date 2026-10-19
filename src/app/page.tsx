@@ -1,12 +1,10 @@
-import CandleChart from "@/components/CandleChart";
-import ExperimentPanel from "@/components/ExperimentPanel";
+import Dashboard from "@/components/Dashboard";
 
 export default function Home() {
   return (
     <main>
       <h1>EV over Trade Sessions</h1>
-      <CandleChart />
-      <ExperimentPanel />
+      <Dashboard />
     </main>
   );
 }

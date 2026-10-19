@@ -1,5 +1,12 @@
-import { DEFAULT_TRADE_AMOUNT_USD, EXPIRATION_MS, RISK_REWARD_RATIO } from "./constants";
-import { randomDirection } from "./randomize";
+import {
+  BAR_INTERVAL_MS,
+  DEFAULT_EXPERIMENT_PARAMS,
+  DEFAULT_TRADE_AMOUNT_USD,
+  POSITION_SIZE_USD,
+  STOP_LOSS_PCT,
+  type ExperimentParams,
+} from "./constants";
+import { randomDirection, type DirectionPlan } from "./randomize";
 import sessions from "./sessions.json";
 import type { OhlcvBar, SessionTrade } from "./types";
 
@@ -20,11 +27,39 @@ function hhmmToMs(hhmm: string): number {
 
 /**
  * For every working day (Mon-Fri, UTC) in the data, opens one random position
- * (LONG/SHORT coin flip) at each session open and closes it EXPIRATION_MS later.
- * Entry = open of the 5-min bar at the session open; exit = open of the bar at
- * entry + EXPIRATION_MS. WIN if price moved with the position, R = +RR / -1.
+ * (LONG/SHORT coin flip) at each session open: a POSITION_SIZE_USD ($500)
+ * position risking DEFAULT_TRADE_AMOUNT_USD ($5). Entry = open of the 5-min
+ * bar at the session open.
+ *
+ * PnL (USD) = POSITION_SIZE_USD x signed price change between open and close,
+ * so a +0.1008% move is +$0.50 on a long (-$0.50 on a short) = 10.08% of the
+ * $5 risk. Price levels derived from the sizing (STOP_LOSS_PCT = 5 / 500 = 1%):
+ *   stop   = entry -/+ entry * STOP_LOSS_PCT                      (loses 1 x risk)
+ *   target = entry +/- entry * STOP_LOSS_PCT * riskRewardRatio    (wins RR x risk)
+ *
+ * A trade is closed by exactly one of three scenarios, checked bar by bar:
+ *   1. TP     - a bar's range reaches the target      -> +RR R, +risk x RR USD
+ *   2. SL     - a bar's range reaches the stop        -> -1 R,  -risk USD
+ *   3. EXPIRY - neither level is reached within T     -> closed at the open of
+ *               the bar at entry + T; PnL = position x price change, R = PnL / risk.
+ * If a single bar touches both levels, the stop is assumed to be hit first
+ * (conservative convention, since intrabar order is unknown).
+ *
+ * `params` holds the independent variables of the run: expiration time (T)
+ * and risk-to-reward ratio (RR, 2 = 1:2).
+ *
+ * `getDirection` (optional) resolves the direction for a "day|session" slot.
+ * Pass the same plan (see createDirectionPlan) for several markets so the
+ * same slot gets the same random direction on every market; when omitted,
+ * each slot gets an independent coin flip.
  */
-export function runExperiment(bars: OhlcvBar[]): SessionTrade[] {
+export function runExperiment(
+  bars: OhlcvBar[],
+  getDirection: DirectionPlan = () => randomDirection(),
+  params: ExperimentParams = DEFAULT_EXPERIMENT_PARAMS
+): SessionTrade[] {
+  const { expirationMs, riskRewardRatio } = params;
+  const riskUsd = DEFAULT_TRADE_AMOUNT_USD;
   const byTime = new Map<number, OhlcvBar>();
   for (const b of bars) byTime.set(toMs(b.date), b);
 
@@ -39,35 +74,107 @@ export function runExperiment(bars: OhlcvBar[]): SessionTrade[] {
 
     for (const s of sessions) {
       const entryMs = day + hhmmToMs(s.openUTC);
-      const exitMs = entryMs + EXPIRATION_MS;
-      if (entryMs < firstMs || exitMs > lastMs) continue;
+      const expiryMs = entryMs + expirationMs;
+      if (entryMs < firstMs || expiryMs > lastMs) continue;
 
-      const direction = randomDirection();
+      const dayIso = new Date(day).toISOString().slice(0, 10);
+      const direction = getDirection(`${dayIso}|${s.abbrev}`);
       const base = {
         session: s.name,
         abbrev: s.abbrev,
-        day: new Date(day).toISOString().slice(0, 10),
+        day: dayIso,
         sessionOpenUTC: s.openUTC,
         direction,
         entryTime: fmt(entryMs),
-        exitTime: fmt(exitMs),
+        expiryTime: fmt(expiryMs),
+      };
+      const noData: SessionTrade = {
+        ...base,
+        exitTime: fmt(expiryMs),
+        entry: null,
+        stop: null,
+        target: null,
+        exit: null,
+        closeReason: "NO DATA",
+        outcome: "NO DATA",
+        r: 0,
+        pnlPct: null,
+        pnlUsd: null,
       };
 
       const entryBar = byTime.get(entryMs);
-      const exitBar = byTime.get(exitMs);
-      if (!entryBar || !exitBar) {
-        trades.push({ ...base, entry: null, exit: null, outcome: "NO DATA", r: 0, pnlPct: null, pnlUsd: null });
+      if (!entryBar) {
+        trades.push(noData);
         continue;
       }
 
       const entry = entryBar.open;
-      const exit = exitBar.open;
-      const diff = direction === "LONG" ? exit - entry : entry - exit;
-      const outcome = diff > 0 ? "WIN" : diff < 0 ? "LOSS" : "FLAT";
-      const r = outcome === "WIN" ? RISK_REWARD_RATIO : outcome === "LOSS" ? -1 : 0;
-      const pnlPct = diff / entry;
-      const pnlUsd = DEFAULT_TRADE_AMOUNT_USD * pnlPct;
-      trades.push({ ...base, entry, exit, outcome, r, pnlPct, pnlUsd });
+      const sign = direction === "LONG" ? 1 : -1;
+      const stopDist = entry * STOP_LOSS_PCT;
+      const stop = entry - sign * stopDist;
+      const target = entry + sign * stopDist * riskRewardRatio;
+      const levels = { entry, stop, target };
+
+      // Scenario 1 / 2: scan every bar inside the hold window for a TP or SL hit.
+      let closed: SessionTrade | null = null;
+      for (let t = entryMs; t < expiryMs && !closed; t += BAR_INTERVAL_MS) {
+        const bar = byTime.get(t);
+        if (!bar) continue;
+        const hitStop = direction === "LONG" ? bar.low <= stop : bar.high >= stop;
+        const hitTarget = direction === "LONG" ? bar.high >= target : bar.low <= target;
+        if (hitStop) {
+          closed = {
+            ...base,
+            ...levels,
+            exitTime: fmt(t),
+            exit: stop,
+            closeReason: "SL",
+            outcome: "LOSS",
+            r: -1,
+            pnlPct: -STOP_LOSS_PCT,
+            pnlUsd: -riskUsd,
+          };
+        } else if (hitTarget) {
+          closed = {
+            ...base,
+            ...levels,
+            exitTime: fmt(t),
+            exit: target,
+            closeReason: "TP",
+            outcome: "WIN",
+            r: riskRewardRatio,
+            pnlPct: STOP_LOSS_PCT * riskRewardRatio,
+            pnlUsd: riskUsd * riskRewardRatio,
+          };
+        }
+      }
+      if (closed) {
+        trades.push(closed);
+        continue;
+      }
+
+      // Scenario 3: expiry - close at the open of the bar at entry + T.
+      const expiryBar = byTime.get(expiryMs);
+      if (!expiryBar) {
+        trades.push({ ...noData, ...levels });
+        continue;
+      }
+      const exit = expiryBar.open;
+      const diff = sign * (exit - entry);
+      const pnlPct = diff / entry; // signed price change open -> close
+      const pnlUsd = POSITION_SIZE_USD * pnlPct;
+      const r = pnlUsd / riskUsd; // fraction of the $5 risk won/lost
+      trades.push({
+        ...base,
+        ...levels,
+        exitTime: fmt(expiryMs),
+        exit,
+        closeReason: "EXPIRY",
+        outcome: diff > 0 ? "WIN" : diff < 0 ? "LOSS" : "FLAT",
+        r,
+        pnlPct,
+        pnlUsd,
+      });
     }
   }
   return trades;
